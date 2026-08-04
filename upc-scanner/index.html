@@ -4,6 +4,10 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>UPC Scanner</title>
+  
+  <!-- Barcode Scanning Library -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -11,6 +15,13 @@
       margin: 2rem auto;
       padding: 0 1rem;
       color: #333;
+    }
+    #reader {
+      width: 100%;
+      background: #000;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-bottom: 1rem;
     }
     #company-info {
       background: #f8f9fa;
@@ -47,7 +58,10 @@
 
   <h1>UPC Accountability Lookup</h1>
   
-  <div id="statusEl">Ready to scan...</div>
+  <!-- Camera Stream Container -->
+  <div id="reader"></div>
+
+  <div id="statusEl">Initializing camera...</div>
 
   <div id="company-info" style="display: none;">
     <h2 id="product-name" style="margin-top: 0;"></h2>
@@ -58,15 +72,16 @@
 
   <script>
     const statusEl = document.getElementById('statusEl');
+    let html5QrcodeScanner;
 
+    // Fetch accountability data for a UPC code
     async function processBarcode(upc) {
       statusEl.textContent = `Processing UPC: ${upc}...`;
       
       const container = document.getElementById('violations-container');
-      container.innerHTML = ""; // Wipe previous results
+      container.innerHTML = "";
 
       try {
-        // Query your Netlify Serverless Function endpoint
         const response = await fetch(`/api/accountability?upc=${upc}`);
         const data = await response.json();
 
@@ -75,7 +90,6 @@
           return;
         }
 
-        // Display product metadata
         document.getElementById('product-name').textContent = data.productName;
         document.getElementById('company-name').textContent = 
           data.parentCompany && data.parentCompany !== data.brand 
@@ -84,7 +98,6 @@
 
         document.getElementById('company-info').style.display = 'block';
 
-        // Build dynamic violations list
         if (data.violations && data.violations.length > 0) {
           statusEl.textContent = `Found ${data.violations.length} reported violations for ${data.parentCompany || data.brand}.`;
 
@@ -103,13 +116,34 @@
           });
         } else {
           statusEl.textContent = "Lookup finished.";
-          container.innerHTML = `<p style="color: #6c757d;">No active enforcement records found in Violation Tracker for <strong>${data.parentCompany || data.brand}</strong>.</p>`;
+          container.innerHTML = `<p style="color: #6c757d;">No active enforcement records found for <strong>${data.parentCompany || data.brand}</strong>.</p>`;
         }
 
       } catch (err) {
         statusEl.textContent = "Error fetching corporate data.";
       }
     }
+
+    // Initialize Camera Feed
+    function onScanSuccess(decodedText, decodedResult) {
+      // Pause scanner after detection so it doesn't repeatedly query the same code
+      html5QrcodeScanner.clear();
+      processBarcode(decodedText);
+    }
+
+    function onScanFailure(error) {
+      // Quietly ignore frame parsing failures
+    }
+
+    window.addEventListener('load', () => {
+      statusEl.textContent = "Point camera at a product barcode...";
+      html5QrcodeScanner = new Html5QrcodeScanner(
+        "reader", 
+        { fps: 10, qrbox: { width: 250, height: 150 } },
+        /* verbose= */ false
+      );
+      html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+    });
   </script>
 </body>
 </html>
