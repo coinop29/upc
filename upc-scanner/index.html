@@ -1,51 +1,115 @@
-async function processBarcode(upc) {
-  statusEl.textContent = `Processing UPC: ${upc}...`;
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>UPC Scanner</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      max-width: 600px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      color: #333;
+    }
+    #company-info {
+      background: #f8f9fa;
+      padding: 1rem;
+      border-radius: 8px;
+      margin: 1rem 0;
+      border: 1px solid #e9ecef;
+    }
+    .violation-item {
+      background: #fff;
+      border: 1px solid #dee2e6;
+      border-left: 4px solid #dc3545;
+      padding: 1rem;
+      margin-bottom: 0.75rem;
+      border-radius: 4px;
+    }
+    .violation-title {
+      font-weight: bold;
+      font-size: 1.1rem;
+      margin-bottom: 0.5rem;
+    }
+    .violation-meta {
+      font-size: 0.9rem;
+      color: #495057;
+      line-height: 1.4;
+    }
+    #statusEl {
+      margin: 1rem 0;
+      font-weight: 500;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>UPC Accountability Lookup</h1>
   
-  const container = document.getElementById('violations-container');
-  container.innerHTML = ""; // Wipe previous results
+  <div id="statusEl">Ready to scan...</div>
 
-  try {
-    // Query your Netlify Serverless Function endpoint
-    const response = await fetch(`/api/accountability?upc=${upc}`);
-    const data = await response.json();
+  <div id="company-info" style="display: none;">
+    <h2 id="product-name" style="margin-top: 0;"></h2>
+    <h3 id="company-name" style="color: #6c757d; margin-bottom: 0;"></h3>
+  </div>
 
-    if (!response.ok) {
-      statusEl.textContent = data.error || "Product not found.";
-      return;
+  <div id="violations-container"></div>
+
+  <script>
+    const statusEl = document.getElementById('statusEl');
+
+    async function processBarcode(upc) {
+      statusEl.textContent = `Processing UPC: ${upc}...`;
+      
+      const container = document.getElementById('violations-container');
+      container.innerHTML = ""; // Wipe previous results
+
+      try {
+        // Query your Netlify Serverless Function endpoint
+        const response = await fetch(`/api/accountability?upc=${upc}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          statusEl.textContent = data.error || "Product not found.";
+          return;
+        }
+
+        // Display product metadata
+        document.getElementById('product-name').textContent = data.productName;
+        document.getElementById('company-name').textContent = 
+          data.parentCompany && data.parentCompany !== data.brand 
+            ? `${data.brand} (Parent: ${data.parentCompany})` 
+            : data.brand;
+
+        document.getElementById('company-info').style.display = 'block';
+
+        // Build dynamic violations list
+        if (data.violations && data.violations.length > 0) {
+          statusEl.textContent = `Found ${data.violations.length} reported violations for ${data.parentCompany || data.brand}.`;
+
+          data.violations.forEach((v) => {
+            const card = document.createElement('div');
+            card.className = 'violation-item';
+            card.innerHTML = `
+              <div class="violation-title">${v.primaryOffense}</div>
+              <div class="violation-meta">
+                <strong>Agency:</strong> ${v.agency}<br/>
+                <strong>Penalty:</strong> $${v.penaltyAmount ? v.penaltyAmount.toLocaleString() : '0'}<br/>
+                <strong>Year:</strong> ${v.year} | <strong>Group:</strong> ${v.offenseGroup}
+              </div>
+            `;
+            container.appendChild(card);
+          });
+        } else {
+          statusEl.textContent = "Lookup finished.";
+          container.innerHTML = `<p style="color: #6c757d;">No active enforcement records found in Violation Tracker for <strong>${data.parentCompany || data.brand}</strong>.</p>`;
+        }
+
+      } catch (err) {
+        statusEl.textContent = "Error fetching corporate data.";
+      }
     }
-
-    // Display product metadata
-    document.getElementById('product-name').textContent = data.productName;
-    document.getElementById('company-name').textContent = 
-      data.parentCompany && data.parentCompany !== data.brand 
-        ? `${data.brand} (Parent: ${data.parentCompany})` 
-        : data.brand;
-
-    document.getElementById('company-info').style.display = 'block';
-
-    // Build dynamic violations list
-    if (data.violations && data.violations.length > 0) {
-      statusEl.textContent = `Found ${data.violations.length} reported violations for ${data.parentCompany || data.brand}.`;
-
-      data.violations.forEach((v) => {
-        const card = document.createElement('div');
-        card.className = 'violation-item';
-        card.innerHTML = `
-          <div class="violation-title">${v.primaryOffense}</div>
-          <div class="violation-meta">
-            <strong>Agency:</strong> ${v.agency}<br/>
-            <strong>Penalty:</strong> $${v.penaltyAmount.toLocaleString()}<br/>
-            <strong>Year:</strong> ${v.year} | <strong>Group:</strong> ${v.offenseGroup}
-          </div>
-        `;
-        container.appendChild(card);
-      });
-    } else {
-      statusEl.textContent = "Lookup finished.";
-      container.innerHTML = `<p style="color: #6c757d;">No active enforcement records found in Violation Tracker for <strong>${data.parentCompany || data.brand}</strong>.</p>`;
-    }
-
-  } catch (err) {
-    statusEl.textContent = "Error fetching corporate data.";
-  }
-}
+  </script>
+</body>
+</html>
