@@ -1,0 +1,51 @@
+async function processBarcode(upc) {
+  statusEl.textContent = `Processing UPC: ${upc}...`;
+  
+  const container = document.getElementById('violations-container');
+  container.innerHTML = ""; // Wipe previous results
+
+  try {
+    // Query your Netlify Serverless Function endpoint
+    const response = await fetch(`/api/accountability?upc=${upc}`);
+    const data = await response.json();
+
+    if (!response.ok) {
+      statusEl.textContent = data.error || "Product not found.";
+      return;
+    }
+
+    // Display product metadata
+    document.getElementById('product-name').textContent = data.productName;
+    document.getElementById('company-name').textContent = 
+      data.parentCompany && data.parentCompany !== data.brand 
+        ? `${data.brand} (Parent: ${data.parentCompany})` 
+        : data.brand;
+
+    document.getElementById('company-info').style.display = 'block';
+
+    // Build dynamic violations list
+    if (data.violations && data.violations.length > 0) {
+      statusEl.textContent = `Found ${data.violations.length} reported violations for ${data.parentCompany || data.brand}.`;
+
+      data.violations.forEach((v) => {
+        const card = document.createElement('div');
+        card.className = 'violation-item';
+        card.innerHTML = `
+          <div class="violation-title">${v.primaryOffense}</div>
+          <div class="violation-meta">
+            <strong>Agency:</strong> ${v.agency}<br/>
+            <strong>Penalty:</strong> $${v.penaltyAmount.toLocaleString()}<br/>
+            <strong>Year:</strong> ${v.year} | <strong>Group:</strong> ${v.offenseGroup}
+          </div>
+        `;
+        container.appendChild(card);
+      });
+    } else {
+      statusEl.textContent = "Lookup finished.";
+      container.innerHTML = `<p style="color: #6c757d;">No active enforcement records found in Violation Tracker for <strong>${data.parentCompany || data.brand}</strong>.</p>`;
+    }
+
+  } catch (err) {
+    statusEl.textContent = "Error fetching corporate data.";
+  }
+}
