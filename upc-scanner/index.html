@@ -1,148 +1,232 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Unethical Practice Checker (UPC) by Jonah Brucker-Cohen</title>
-  
-  <!-- Barcode Scanning Library -->
-  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
-
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>UPC Scanner</title>
+  <!-- QuaggaJS for Barcode Scanning -->
+  <script src="https://cdn.jsdelivr.net/npm/@ericblade/quagga2/dist/quagga.min.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      max-width: 600px;
-      margin: 2rem auto;
-      padding: 0 1rem;
+      margin: 0;
+      padding: 16px;
+      background-color: #f4f4f9;
       color: #333;
     }
-    #reader {
+    .container {
+      max-width: 600px;
+      margin: 0 auto;
+      background: #ffffff;
+      padding: 20px;
+      border-radius: 12px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    h1 {
+      font-size: 1.5rem;
+      margin-top: 0;
+      text-align: center;
+    }
+    #interactive.viewport {
+      position: relative;
       width: 100%;
-      background: #000;
-      border-radius: 8px;
+      height: 240px;
       overflow: hidden;
-      margin-bottom: 1rem;
-    }
-    #company-info {
-      background: #f8f9fa;
-      padding: 1rem;
       border-radius: 8px;
-      margin: 1rem 0;
-      border: 1px solid #e9ecef;
+      background: #000;
+      margin-bottom: 20px;
     }
-    .violation-item {
+    #interactive.viewport video, #interactive.viewport canvas {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    /* Active Product Card Display */
+    .product-card {
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 16px;
       background: #fff;
-      border: 1px solid #dee2e6;
-      border-left: 4px solid #dc3545;
-      padding: 1rem;
-      margin-bottom: 0.75rem;
-      border-radius: 4px;
+      margin-top: 10px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
     }
-    .violation-title {
+    .product-card img {
+      max-width: 150px;
+      max-height: 150px;
+      object-fit: contain;
+      margin-bottom: 12px;
+      border-radius: 6px;
+    }
+    .product-card .title {
+      font-size: 1.2rem;
       font-weight: bold;
+      margin-bottom: 6px;
+    }
+    .product-card .upc-badge {
+      font-size: 0.85rem;
+      color: #6b7280;
+      background: #f3f4f6;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-bottom: 8px;
+    }
+    .product-card .price {
       font-size: 1.1rem;
-      margin-bottom: 0.5rem;
+      color: #059669;
+      font-weight: 600;
     }
-    .violation-meta {
-      font-size: 0.9rem;
-      color: #495057;
-      line-height: 1.4;
+
+    .placeholder-card {
+      text-align: center;
+      padding: 30px;
+      color: #9ca3af;
+      border: 2px dashed #e5e7eb;
+      border-radius: 8px;
     }
-    #statusEl {
-      margin: 1rem 0;
-      font-weight: 500;
+
+    .status-tag {
+      display: inline-block;
+      padding: 4px 8px;
+      background: #22c55e;
+      color: #fff;
+      font-size: 0.75rem;
+      border-radius: 4px;
+      margin-top: 8px;
     }
   </style>
 </head>
 <body>
 
-  <h1>Unethical Practice Checker (UPC)</h1>
-  
-  <!-- Camera Stream Container -->
-  <div id="reader"></div>
+  <div class="container">
+    <h1>UPC Product Scanner</h1>
 
-  <div id="statusEl">Initializing camera...</div>
+    <!-- Live Scanner Viewport -->
+    <div id="interactive" class="viewport"></div>
 
-  <div id="company-info" style="display: none;">
-    <h2 id="product-name" style="margin-top: 0;"></h2>
-    <h3 id="company-name" style="color: #6c757d; margin-bottom: 0;"></h3>
+    <!-- Active Scanned Product Section -->
+    <h2>Scanned Product</h2>
+    <div id="product-card-container">
+      <div class="placeholder-card">
+        Scan a product barcode to view details here.
+      </div>
+    </div>
+
+    <div id="event-status" class="status-tag" style="display: none;">App Event PostMessage Sent!</div>
   </div>
 
-  <div id="violations-container"></div>
-
   <script>
-    const statusEl = document.getElementById('statusEl');
-    let html5QrcodeScanner;
+    let isProcessing = false;
 
-    // Fetch accountability data for a UPC code
-    async function processBarcode(upc) {
-      statusEl.textContent = `Processing UPC: ${upc}...`;
-      
-      const container = document.getElementById('violations-container');
-      container.innerHTML = "";
+    // 1. Render the scanned product details onto the page UI
+    function displayProductOnPage(upc, productData) {
+      const container = document.getElementById('product-card-container');
 
+      // Fallback details if response data is missing fields
+      const title = productData?.title || productData?.name || 'Product Found';
+      const image = productData?.image || productData?.imageUrl || 'https://via.placeholder.com/150?text=No+Image';
+      const price = productData?.price ? `$${productData.price}` : 'Price unavailable';
+
+      container.innerHTML = `
+        <div class="product-card">
+          <img src="${image}" alt="${title}">
+          <div class="title">${title}</div>
+          <div class="upc-badge">UPC: ${upc}</div>
+          <div class="price">${price}</div>
+        </div>
+      `;
+    }
+
+    // 2. Trigger postMessage automatically
+    function triggerAppEvent(upcCode, productData = null) {
+      const payload = {
+        event: 'PRODUCT_SCANNED',
+        upc: upcCode,
+        data: productData,
+        timestamp: new Date().toISOString()
+      };
+
+      // Standard Web PostMessage
+      window.postMessage(payload, '*');
+
+      // Mobile WebView Bridges (iOS / Android compatibility)
+      if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.appEvent) {
+        window.webkit.messageHandlers.appEvent.postMessage(payload);
+      }
+      if (window.AndroidHost && window.AndroidHost.postMessage) {
+        window.AndroidHost.postMessage(JSON.stringify(payload));
+      }
+
+      // Show temporary status badge
+      const statusEl = document.getElementById('event-status');
+      statusEl.style.display = 'inline-block';
+      setTimeout(() => { statusEl.style.display = 'none'; }, 2000);
+    }
+
+    // 3. Fetch product details from your backend function
+    async function lookupUPC(upc) {
       try {
-        const response = await fetch(`/api/accountability?upc=${upc}`);
-        const data = await response.json();
-
-        if (!response.ok) {
-          statusEl.textContent = data.error || "Product not found.";
-          return;
-        }
-
-        document.getElementById('product-name').textContent = data.productName;
-        document.getElementById('company-name').textContent = 
-          data.parentCompany && data.parentCompany !== data.brand 
-            ? `${data.brand} (Parent: ${data.parentCompany})` 
-            : data.brand;
-
-        document.getElementById('company-info').style.display = 'block';
-
-        if (data.violations && data.violations.length > 0) {
-          statusEl.textContent = `Found ${data.violations.length} reported violations for ${data.parentCompany || data.brand}.`;
-
-          data.violations.forEach((v) => {
-            const card = document.createElement('div');
-            card.className = 'violation-item';
-            card.innerHTML = `
-              <div class="violation-title">${v.primaryOffense}</div>
-              <div class="violation-meta">
-                <strong>Agency:</strong> ${v.agency}<br/>
-                <strong>Penalty:</strong> $${v.penaltyAmount ? v.penaltyAmount.toLocaleString() : '0'}<br/>
-                <strong>Year:</strong> ${v.year} | <strong>Group:</strong> ${v.offenseGroup}
-              </div>
-            `;
-            container.appendChild(card);
-          });
-        } else {
-          statusEl.textContent = "Lookup finished.";
-          container.innerHTML = `<p style="color: #6c757d;">No active enforcement records found for <strong>${data.parentCompany || data.brand}</strong>.</p>`;
-        }
-
+        const response = await fetch(`/.netlify/functions/lookup?upc=${upc}`);
+        if (!response.ok) throw new Error('Lookup failed');
+        return await response.json();
       } catch (err) {
-        statusEl.textContent = "Error fetching corporate data.";
+        console.warn('Backend lookup error:', err);
+        return { upc: upc, title: 'Unknown Product', price: 'N/A' };
       }
     }
 
-    // Initialize Camera Feed
-    function onScanSuccess(decodedText, decodedResult) {
-      // Pause scanner after detection so it doesn't repeatedly query the same code
-      html5QrcodeScanner.clear();
-      processBarcode(decodedText);
-    }
+    // 4. Initialize Quagga Scanner
+    Quagga.init({
+      inputStream: {
+        name: "Live",
+        type: "LiveStream",
+        target: document.querySelector('#interactive'),
+        constraints: {
+          facingMode: "environment"
+        }
+      },
+      decoder: {
+        readers: ["upc_reader", "upc_e_reader", "ean_reader"]
+      }
+    }, function(err) {
+      if (err) {
+        console.error("Scanner error:", err);
+        return;
+      }
+      Quagga.start();
+    });
 
-    function onScanFailure(error) {
-      // Quietly ignore frame parsing failures
-    }
+    // 5. Automatic Scan Execution
+    Quagga.onDetected(async function(result) {
+      const code = result.codeResult.code;
 
-    window.addEventListener('load', () => {
-      statusEl.textContent = "Point camera at a product barcode...";
-      html5QrcodeScanner = new Html5QrcodeScanner(
-        "reader", 
-        { fps: 10, qrbox: { width: 250, height: 150 } },
-        /* verbose= */ false
-      );
-      html5QrcodeScanner.render(onScanSuccess, onScanFailure);
+      if (!code || isProcessing) return;
+      isProcessing = true; // Prevent multiple rapid scans
+
+      // Show loading indicator in the product section
+      document.getElementById('product-card-container').innerHTML = `
+        <div class="placeholder-card">
+          Searching product info for UPC: <strong>${code}</strong>...
+        </div>
+      `;
+
+      // Fetch product data
+      const productData = await lookupUPC(code);
+
+      // Render product to the main page
+      displayProductOnPage(code, productData);
+
+      // Post app event automatically
+      triggerAppEvent(code, productData);
+
+      // 2.5-second cooldown before scanning another item
+      setTimeout(() => {
+        isProcessing = false;
+      }, 2500);
     });
   </script>
 </body>
