@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -122,26 +122,45 @@
   <script>
     let isProcessing = false;
 
-    // 1. Render the scanned product details onto the page UI
-function displayProductOnPage(upc, productData) {
+   function displayProductOnPage(upc, productData) {
   const container = document.getElementById('product-card-container');
 
-  const title = productData?.title || productData?.name || 'Product Scanned';
-  const price = (productData?.price && productData.price !== 'N/A') 
-    ? `$${productData.price}` 
-    : 'Price Unavailable';
-
-  // Only render an image tag if a valid image URL exists
+  const title = productData?.title || 'Product Scanned';
+  const brand = productData?.brand || 'Unknown Brand';
+  const ethics = productData?.ethics || { status: 'No Data', grade: 'N/A', violations: [] };
+  
+  // Image element or fallback text
   const imageHtml = productData?.image 
-    ? `<img src="${productData.image}" alt="${title}">` 
-    : `<div style="padding: 20px; color: #9ca3af; background: #f3f4f6; border-radius: 6px; margin-bottom: 12px;">No Image Available</div>`;
+    ? `<img src="${productData.image}" alt="${title}" style="max-width: 120px; border-radius: 6px; margin-bottom: 12px;">` 
+    : `<div style="padding: 16px; color: #9ca3af; background: #f3f4f6; border-radius: 6px; margin-bottom: 12px;">No Image Available</div>`;
 
+  // Build HTML list of ethical violations
+  let violationsHtml = '';
+  if (ethics.violations && ethics.violations.length > 0) {
+    violationsHtml = ethics.violations.map(v => `
+      <div style="background: #fef2f2; border-left: 4px solid #ef4444; padding: 8px; margin-top: 6px; text-align: left; font-size: 0.85rem;">
+        <strong style="color: #991b1b;">${v.type}</strong><br>
+        <span>Agency: ${v.agency}</span> | <span>Fine: ${v.penalty}</span>
+      </div>
+    `).join('');
+  } else {
+    violationsHtml = `<div style="color: #166534; font-size: 0.9rem; margin-top: 6px;">No ethics violations found on record.</div>`;
+  }
+
+  // Render Card to Main Page
   container.innerHTML = `
     <div class="product-card">
       ${imageHtml}
       <div class="title">${title}</div>
-      <div class="upc-badge">UPC: ${upc}</div>
-      <div class="price">${price}</div>
+      <div class="upc-badge">Brand: ${brand} | UPC: ${upc}</div>
+      
+      <!-- Ethics Status Display -->
+      <div style="width: 100%; margin-top: 14px; padding-top: 14px; border-top: 1px solid #e5e7eb;">
+        <div style="font-weight: bold; font-size: 1rem; margin-bottom: 4px;">
+          Ethics Status: <span style="color: ${ethics.grade === 'F' ? '#dc2626' : '#2563eb'}">${ethics.status} (Grade: ${ethics.grade})</span>
+        </div>
+        ${violationsHtml}
+      </div>
     </div>
   `;
 }
