@@ -123,23 +123,28 @@
     let isProcessing = false;
 
     // 1. Render the scanned product details onto the page UI
-    function displayProductOnPage(upc, productData) {
-      const container = document.getElementById('product-card-container');
+function displayProductOnPage(upc, productData) {
+  const container = document.getElementById('product-card-container');
 
-      // Fallback details if response data is missing fields
-      const title = productData?.title || productData?.name || 'Product Found';
-      const image = productData?.image || productData?.imageUrl || 'https://via.placeholder.com/150?text=No+Image';
-      const price = productData?.price ? `$${productData.price}` : 'Price unavailable';
+  const title = productData?.title || productData?.name || 'Product Scanned';
+  const price = (productData?.price && productData.price !== 'N/A') 
+    ? `$${productData.price}` 
+    : 'Price Unavailable';
 
-      container.innerHTML = `
-        <div class="product-card">
-          <img src="${image}" alt="${title}">
-          <div class="title">${title}</div>
-          <div class="upc-badge">UPC: ${upc}</div>
-          <div class="price">${price}</div>
-        </div>
-      `;
-    }
+  // Only render an image tag if a valid image URL exists
+  const imageHtml = productData?.image 
+    ? `<img src="${productData.image}" alt="${title}">` 
+    : `<div style="padding: 20px; color: #9ca3af; background: #f3f4f6; border-radius: 6px; margin-bottom: 12px;">No Image Available</div>`;
+
+  container.innerHTML = `
+    <div class="product-card">
+      ${imageHtml}
+      <div class="title">${title}</div>
+      <div class="upc-badge">UPC: ${upc}</div>
+      <div class="price">${price}</div>
+    </div>
+  `;
+}
 
     // 2. Trigger postMessage automatically
     function triggerAppEvent(upcCode, productData = null) {
