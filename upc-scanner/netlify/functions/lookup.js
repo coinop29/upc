@@ -1,74 +1,66 @@
 exports.handler = async (event, context) => {
+  // Extract UPC from query parameters
   const upc = event.queryStringParameters ? event.queryStringParameters.upc : null;
-  
+
   if (!upc) {
     return {
       statusCode: 400,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'UPC code parameter required' }),
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      },
+      body: JSON.stringify({ error: 'UPC parameter missing' }),
     };
   }
 
-  // Clean UPC input (remove whitespace/hyphens)
-  const cleanUpc = upc.replace(/[^0-9]/g, '');
+  // Sanitize UPC string
+  const cleanUpc = String(upc).replace(/[^0-9]/g, '');
 
   try {
-    // 1. Primary Lookup: UPC Item DB (General Household, Personal Care, Goods)
-    const API_KEY = process.env.2nf0zt5m2enohtjygibfnx07wrpxnu; // Set in Netlify Environment Variables
-const response = await fetch(`https://api.barcodelookup.com/v3/products?barcode=${cleanUpc}&formatted=y&key=${API_KEY}`);
-const data = await response.json();
+    // Open Food Facts API requires a custom User-Agent header
+    const response = await fetch(`https://world.openfoodfacts.org/api/v0/product/${cleanUpc}.json`, {
+      headers: {
+        'User-Agent': 'UnethicalPracticeChecker/1.0 (https://www.coin-operated.com/upc/)'
+      }
+    });
 
-if (data.products && data.products.length > 0) {
-  const item = data.products[0];
-  return {
-    statusCode: 200,
-    headers: { 'Content-Type': 'application/json', 'Access-Control-Allow-Origin': '*' },
-    body: JSON.stringify({
-      upc: cleanUpc,
-      title: item.title,
-      brand: item.brand,
-      category: item.category,
-      image: item.images ? item.images[0] : '',
-      flag: 'Warning'
-    })
-  };
-}
-    // 2. Fallback Lookup: Open Food Facts (In case it is a food/beverage product)
-    const offResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${cleanUpc}.json`);
-    const offData = await offResponse.json();
+    if (response.ok) {
+      const data = await response.json();
 
-    if (offData.status === 1 && offData.product) {
-      const product = offData.product;
-      return {
-        statusCode: 200,
-        headers: { 
-          'Content-Type': 'application/json',
-          'Access-Control-Allow-Origin': '*' 
-        },
-        body: JSON.stringify({
-          upc: cleanUpc,
-          title: product.product_name || product.product_name_en || 'Scanned Product',
-          brand: product.brands || 'Unknown Brand',
-          category: product.categories || 'Food & Grocery',
-          image: product.image_front_url || product.image_url || '',
-          price: 'N/A',
-          flag: 'Warning'
-        }),
-      };
+      if (data.status === 1 && data.product) {
+        const product = data.product;
+        return {
+          statusCode: 200,
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Headers': 'Content-Type'
+          },
+          body: JSON.stringify({
+            upc: cleanUpc,
+            title: product.product_name || product.product_name_en || `Scanned Product (${cleanUpc})`,
+            brand: product.brands || 'Unknown Brand',
+            image: product.image_front_url || product.image_url || '',
+            price: 'N/A',
+            flag: 'Warning'
+          }),
+        };
+      }
     }
 
-    // 3. Fallback when product is not found in either database
+    // Fallback if item is not found in Open Food Facts database
     return {
       statusCode: 200,
-      headers: { 
+      headers: {
         'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*' 
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type'
       },
       body: JSON.stringify({
         upc: cleanUpc,
-        title: `Scanned Household Item (${cleanUpc})`,
-        brand: 'Item not found in global database',
-        category: 'Uncategorized',
+        title: `Scanned Item (${cleanUpc})`,
+        brand: 'Item not in database',
         image: '',
         price: 'N/A',
         flag: 'Clear'
@@ -76,11 +68,24 @@ if (data.products && data.products.length > 0) {
     };
 
   } catch (error) {
-    console.error('Lookup API Error:', error);
+    console.error('Backend lookup error:', error);
+
+    // Graceful fallback response on API network errors
     return {
-      statusCode: 500,
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ error: 'Failed to fetch product data' }),
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type'
+      },
+      body: JSON.stringify({
+        upc: cleanUpc,
+        title: `Scanned Item (${cleanUpc})`,
+        brand: 'Lookup Service Unavailable',
+        image: '',
+        price: 'N/A',
+        flag: 'Warning'
+      }),
     };
   }
 };
