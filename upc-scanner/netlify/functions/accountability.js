@@ -8,6 +8,7 @@ const KNOWN_PARENT_MAP = {
   "coca-cola": "The Coca-Cola Company",
   nestle: "Nestlé",
   "nestlé": "Nestlé",
+    monster: "The Coca-Cola Company", // Monster Beverage Corp / Coca-Cola Partnership
   pepsico: "PepsiCo",
   mondelez: "Mondelez International",
   unilever: "Unilever",
@@ -176,12 +177,13 @@ export default async (req) => {
       console.warn("Violation tracker query error:", vtErr.message);
     }
 
-    // Fallback static violation flag if external endpoint restricts API calls but company matches major targets
-    if (violations.length === 0 && ["Tyson Foods", "The Coca-Cola Company", "Nestlé"].includes(parentCompany)) {
+        // Fallback static violation flag if external endpoint restricts API calls but company matches major targets
+    const flaggedParents = ["Tyson Foods", "The Coca-Cola Company", "Nestlé", "Monster Beverage"];
+    if (violations.length === 0 && flaggedParents.some(p => parentCompany.includes(p))) {
       violations = [
         {
-          primaryOffense: "Public Policy & Environmental Compliance Records",
-          agency: "OSHA / EPA / Regulatory Filings",
+          primaryOffense: "Public Policy & Environmental / Consumer Compliance Records",
+          agency: "OSHA / EPA / FTC Filings",
           penaltyAmount: 0,
           year: "Active Record",
           offenseGroup: "Corporate Accountability Record",
