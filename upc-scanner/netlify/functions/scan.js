@@ -1,6 +1,5 @@
 // Netlify Function: /.netlify/functions/scan.js
 
-// 1. Put the updated corporateParentMap right here at the top
 const corporateParentMap = {
     // Personal Care & Household Conglomerates
     "colgate": {
@@ -128,7 +127,98 @@ const corporateParentMap = {
     }
 };
 
-// 2. The Netlify handler function follows directly below
 exports.handler = async (event, context) => {
-    // ... rest of handler logic ...
+    const headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Content-Type": "application/json"
+    };
+
+    const upc = event.queryStringParameters?.upc || event.queryStringParameters?.barcode;
+
+    if (!upc) {
+        return {
+            statusCode: 400,
+            headers,
+            body: JSON.stringify({ error: "Missing barcode query parameter" })
+        };
+    }
+
+    try {
+        // Query Open Beauty Facts API first (for personal care items)
+        let apiResponse = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${upc}.json`);
+        let data = await apiResponse.json();
+
+        // Fallback to Open Food Facts API if not found
+        if (!data || data.status !== 1) {
+            apiResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${upc}.json`);
+            data = await apiResponse.json();
+        }
+
+        if (data && data.status === 1 && data.product) {
+            const product = data.product;
+            const brandRaw = (product.brands || product.brand_owner || "").toLowerCase();
+            const productName = product.product_name || "Consumer Product";
+            const imageUrl = product.image_url || "images/default_product.jpg";
+
+            const matchedKey = Object.keys(corporateParentMap).find(key => brandRaw.includes(key));
+
+            if (matchedKey) {
+                const match = corporateParentMap[matchedKey];
+                return {
+                    statusCode: 200,
+                    headers,
+                    body: JSON.stringify({
+                        found: true,
+                        upc: upc,
+                        productName: productName,
+                        brand: match.parent,
+                        imageUrl: imageUrl,
+                        hasViolations: true,
+                        violationType: match.violationType,
+                        agency: match.agency,
+                        penalty: match.penalty,
+                        details: match.details
+                    })
+                };
+            }
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify({
+                    found: true,
+                    upc: upc,
+                    productName: productName,
+                    brand: product.brands || "Independent Manufacturer",
+                    imageUrl: imageUrl,
+                    hasViolations: false,
+                    violationType: "No Tracked Violations",
+                    agency: "N/A",
+                    penalty: "$0 Assessed",
+                    details: "No corporate violations on record for this manufacturer in current tracking databases."
+                })
+            };
+        }
+
+        return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({
+                found: false,
+                upc: upc,
+                productName: "Unregistered Consumer Item",
+                brand: "Unknown Manufacturer",
+                hasViolations: false,
+                details: "Product barcode not yet indexed in regulatory or Open Beauty databases."
+            })
+        };
+
+    } catch (error) {
+        return {
+            statusCode: 500,
+            headers,
+            body: JSON.stringify({ error: "Failed to resolve product barcode", message: error.message })
+        };
+    }
 };
