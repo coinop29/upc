@@ -1,7 +1,45 @@
-// Netlify Function: /.netlify/functions/scan.js
+// Netlify Function: /.netlify/functions/scan?upc=074780000100
 
+// 1. Corporate Parent & Retailer Enforcement Mapping
 const corporateParentMap = {
-    // Personal Care & Household Conglomerates
+    // Food, Beverage & Confectionery
+    "ghirardelli": {
+        parent: "Lindt & Sprüngli / Ghirardelli Chocolate Co.",
+        agency: "US Dept of Labor (WHD) / OSHA",
+        penalty: "$1,200,000+",
+        violationType: "Wage & Hour Infractions & Safety Violations",
+        details: "Documented FLSA labor compliance penalties and workplace manufacturing safety infractions."
+    },
+    "lindt": {
+        parent: "Lindt & Sprüngli",
+        agency: "US Dept of Labor / Consumer Protection",
+        penalty: "$1,500,000+",
+        violationType: "Labor Compliance & Supply Chain Transparency",
+        details: "Workplace compliance penalties and supply chain labor audit documentation."
+    },
+    "horizon": {
+        parent: "Danone North America / Horizon Organic",
+        agency: "EPA / US Dept of Labor",
+        penalty: "$12,000,000+",
+        violationType: "Environmental & Labor Compliance",
+        details: "Environmental discharge regulations and labor policy compliance."
+    },
+    "danone": {
+        parent: "Danone North America",
+        agency: "EPA / OSHA",
+        penalty: "$15,000,000+",
+        violationType: "Environmental & Manufacturing Safety",
+        details: "Industrial discharge settlements and OSHA safety compliance checks."
+    },
+    "nestle": {
+        parent: "Nestlé USA",
+        agency: "US Dept of Labor / EPA / OSHA",
+        penalty: "$45,000,000+",
+        violationType: "Water Extraction & Labor Violations",
+        details: "Water extraction disputes, environmental fines, and wage compliance penalties."
+    },
+
+    // Personal Care Conglomerates
     "colgate": {
         parent: "Colgate-Palmolive Co.",
         agency: "US Dept of Labor / EPA / OSHA",
@@ -38,7 +76,7 @@ const corporateParentMap = {
         details: "Documented regulatory settlements and consumer product compliance resolutions."
     },
 
-    // Pharmacy Chains & House Brands
+    // Pharmacy & Retail House Brands
     "walgreens": {
         parent: "Walgreens Boots Alliance",
         agency: "US Dept of Labor (WHD) / State AGs",
@@ -52,43 +90,6 @@ const corporateParentMap = {
         penalty: "$500,000,000+",
         violationType: "Labor & Regulatory Compliance",
         details: "Pharmacy regulatory settlements, wage and hour compliance penalties, and labor disputes."
-    },
-    "rite aid": {
-        parent: "Rite Aid Corporation",
-        agency: "US Dept of Labor / DEA / FTC",
-        penalty: "$180,000,000+",
-        violationType: "Consumer Protection & Controlled Substances Compliance",
-        details: "FTC consumer privacy settlements, pharmacy regulatory resolutions, and labor infractions."
-    },
-
-    // Major Retailers & Store Brands
-    "target": {
-        parent: "Target Corporation (Up & Up / Good & Gather)",
-        agency: "US Dept of Labor (WHD) / OSHA / EEOC",
-        penalty: "$45,000,000+",
-        violationType: "Wage & Hour & Employment Discrimination",
-        details: "Wage theft settlements, background check discrimination resolutions, and workplace safety citations."
-    },
-    "up & up": {
-        parent: "Target Corporation",
-        agency: "US Dept of Labor (WHD) / OSHA",
-        penalty: "$45,000,000+",
-        violationType: "Retail Labor & Employment Compliance",
-        details: "Wage and hour compliance resolutions and OSHA safety citations."
-    },
-    "kroger": {
-        parent: "The Kroger Co. (Simple Truth / Kroger Brand)",
-        agency: "US Dept of Labor (WHD) / OSHA / FTC",
-        penalty: "$140,000,000+",
-        violationType: "Wage & Hour & Labor Disputes",
-        details: "FLSA labor compliance penalties, back pay settlements, and safety infractions."
-    },
-    "simple truth": {
-        parent: "The Kroger Co.",
-        agency: "US Dept of Labor (WHD) / FTC",
-        penalty: "$140,000,000+",
-        violationType: "Labor & Retail Compliance",
-        details: "Store brand regulatory settlements and workplace labor compliance penalties."
     },
     "equate": {
         parent: "Walmart Inc. (Equate Store Brand)",
@@ -104,39 +105,26 @@ const corporateParentMap = {
         violationType: "Wage & Hour & Safety Violations",
         details: "FLSA labor compliance penalties, EEOC settlements, and safety fines."
     },
-    "great value": {
-        parent: "Walmart Inc.",
-        agency: "US Dept of Labor (WHD) / OSHA",
-        penalty: "$1,600,000,000+",
-        violationType: "Wage & Hour & Supply Chain Violations",
-        details: "FLSA labor penalties and warehouse/retail workplace safety citations."
-    },
     "365": {
         parent: "Amazon.com, Inc. / Whole Foods (365 Brand)",
         agency: "OSHA / US Dept of Labor",
         penalty: "$150,000,000+",
         violationType: "Workplace Safety & Warehouse Labor Infractions",
         details: "OSHA ergonomic citations, labor union interference penalties, and safety violations."
-    },
-    "trader joe": {
-        parent: "Trader Joe's Company",
-        agency: "NLRB / OSHA / US Dept of Labor",
-        penalty: "$12,000,000+",
-        violationType: "Labor Relations & Safety Enforcement",
-        details: "National Labor Relations Board unfair labor practice complaints and workplace safety citations."
     }
 };
 
 exports.handler = async (event, context) => {
+    // Enable CORS for frontend requests
     const headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "Content-Type",
         "Content-Type": "application/json"
     };
 
-    const upc = event.queryStringParameters?.upc || event.queryStringParameters?.barcode;
+    let rawUpc = event.queryStringParameters.upc || event.queryStringParameters.barcode;
 
-    if (!upc) {
+    if (!rawUpc) {
         return {
             statusCode: 400,
             headers,
@@ -144,23 +132,31 @@ exports.handler = async (event, context) => {
         };
     }
 
+    // Standardize 12-digit US UPC to 13-digit EAN/GTIN format
+    let upc = rawUpc.trim();
+    if (upc.length === 12) {
+        upc = '0' + upc;
+    }
+
     try {
-        // Query Open Beauty Facts API first (for personal care items)
-        let apiResponse = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${upc}.json`);
+        // Step 1: Query Open Food Facts API
+        let apiResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${upc}.json`);
         let data = await apiResponse.json();
 
-        // Fallback to Open Food Facts API if not found
+        // Step 2: Fallback to Open Beauty Facts API if not found in Open Food Facts
         if (!data || data.status !== 1) {
-            apiResponse = await fetch(`https://world.openfoodfacts.org/api/v0/product/${upc}.json`);
+            apiResponse = await fetch(`https://world.openbeautyfacts.org/api/v0/product/${upc}.json`);
             data = await apiResponse.json();
         }
 
+        // Step 3: Process metadata if found in either database
         if (data && data.status === 1 && data.product) {
             const product = data.product;
             const brandRaw = (product.brands || product.brand_owner || "").toLowerCase();
-            const productName = product.product_name || "Consumer Product";
-            const imageUrl = product.image_url || "images/default_product.jpg";
+            const productName = product.product_name || product.product_name_en || "Consumer Product";
+            const imageUrl = product.image_front_url || product.image_url || "images/chocolate.jpg";
 
+            // Check if brand or brand owner matches any entry in corporateParentMap
             const matchedKey = Object.keys(corporateParentMap).find(key => brandRaw.includes(key));
 
             if (matchedKey) {
@@ -183,6 +179,7 @@ exports.handler = async (event, context) => {
                 };
             }
 
+            // Product found in global DB, but parent brand has no mapped violations
             return {
                 statusCode: 200,
                 headers,
@@ -201,6 +198,7 @@ exports.handler = async (event, context) => {
             };
         }
 
+        // Step 4: Unrecognized Barcode Fallback
         return {
             statusCode: 200,
             headers,
@@ -210,7 +208,7 @@ exports.handler = async (event, context) => {
                 productName: "Unregistered Consumer Item",
                 brand: "Unknown Manufacturer",
                 hasViolations: false,
-                details: "Product barcode not yet indexed in regulatory or Open Beauty databases."
+                details: "Product barcode not yet indexed in regulatory or Open Food/Beauty databases."
             })
         };
 
