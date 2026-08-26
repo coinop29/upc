@@ -1,6 +1,5 @@
-// Netlify Function: /.netlify/functions/get-scans
 const blobs = require("@netlify/blobs");
-const { getStore } = require("@netlify/blobs");
+const getStore = blobs.getStore;
 
 exports.handler = async (event, context) => {
     const headers = {
