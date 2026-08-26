@@ -114,11 +114,9 @@ const corporateParentMap = {
     }
 };
 
-// Helper: Append scan to shared global history in Netlify Blobs
-// Helper: Append scan to shared global history in Netlify Blobs
+// Helper: Append scan to shared global history in Netlify Blobs via dynamic ESM import
 async function recordGlobalScan(scanItem) {
     try {
-        // Dynamically import ESM module inside CommonJS handler
         const { getStore } = await import("@netlify/blobs");
         
         const store = getStore({
