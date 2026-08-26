@@ -1,5 +1,4 @@
 // Netlify Function: /.netlify/functions/scan?upc=074780000100
-const { getStore } = require("@netlify/blobs");
 
 // 1. Corporate Parent & Retailer Enforcement Mapping
 const corporateParentMap = {
