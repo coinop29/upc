@@ -114,11 +114,17 @@ const corporateParentMap = {
     }
 };
 
-// Helper: Append scan to shared global history in Netlify Blobs via dynamic ESM import
+// Helper: Append scan to shared global history in Netlify Blobs
 async function recordGlobalScan(scanItem) {
     try {
-        const { getStore } = await import("@netlify/blobs");
+        const blobs = await import("@netlify/blobs");
+        // Safe extraction for CJS / ESM transpilation differences
+        const getStore = blobs.getStore || blobs.default?.getStore || blobs.default;
         
+        if (typeof getStore !== "function") {
+            throw new Error(`getStore resolved to ${typeof getStore} instead of function`);
+        }
+
         const store = getStore({
             name: "scan-history",
             consistency: "strong"
@@ -126,7 +132,7 @@ async function recordGlobalScan(scanItem) {
         
         let history = await store.get("global-scans", { type: "json" }) || [];
         
-        // Unshift new scan item and keep the top 20 latest
+        // Unshift new scan item and keep top 20 latest
         history.unshift(scanItem);
         history = history.slice(0, 20);
 
