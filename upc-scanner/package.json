@@ -6,3 +6,7 @@
     "build": "echo 'No build step required for static assets'"
   }
 }
+
+"dependencies": {
+  "@netlify/blobs": "^2.0.0"
+}
