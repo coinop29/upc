@@ -1,4 +1,5 @@
 // Netlify Function: /.netlify/functions/scan?upc=074780000100
+const { getStore } = require("@netlify/blobs");
 
 // 1. Corporate Parent & Retailer Enforcement Mapping
 const corporateParentMap = {
@@ -114,8 +115,23 @@ const corporateParentMap = {
     }
 };
 
+// Helper: Append scan to shared global history in Netlify Blobs
+async function recordGlobalScan(scanItem) {
+    try {
+        const store = getStore("scan-history");
+        let history = await store.get("global-scans", { type: "json" }) || [];
+        
+        // Unshift new scan item and keep the top 20 latest
+        history.unshift(scanItem);
+        history = history.slice(0, 20);
+
+        await store.setJSON("global-scans", history);
+    } catch (err) {
+        console.error("Netlify Blobs write error:", err);
+    }
+}
+
 exports.handler = async (event, context) => {
-    // Enable CORS for frontend requests
     const headers = {
         "Access-Control-Allow-Origin": "*",
         "Access-Control-Allow-Headers": "Content-Type",
@@ -156,34 +172,26 @@ exports.handler = async (event, context) => {
             const productName = product.product_name || product.product_name_en || "Consumer Product";
             const imageUrl = product.image_front_url || product.image_url || "images/chocolate.jpg";
 
-            // Check if brand or brand owner matches any entry in corporateParentMap
             const matchedKey = Object.keys(corporateParentMap).find(key => brandRaw.includes(key));
+
+            let responseData;
 
             if (matchedKey) {
                 const match = corporateParentMap[matchedKey];
-                return {
-                    statusCode: 200,
-                    headers,
-                    body: JSON.stringify({
-                        found: true,
-                        upc: upc,
-                        productName: productName,
-                        brand: match.parent,
-                        imageUrl: imageUrl,
-                        hasViolations: true,
-                        violationType: match.violationType,
-                        agency: match.agency,
-                        penalty: match.penalty,
-                        details: match.details
-                    })
+                responseData = {
+                    found: true,
+                    upc: upc,
+                    productName: productName,
+                    brand: match.parent,
+                    imageUrl: imageUrl,
+                    hasViolations: true,
+                    violationType: match.violationType,
+                    agency: match.agency,
+                    penalty: match.penalty,
+                    details: match.details
                 };
-            }
-
-            // Product found in global DB, but parent brand has no mapped violations
-            return {
-                statusCode: 200,
-                headers,
-                body: JSON.stringify({
+            } else {
+                responseData = {
                     found: true,
                     upc: upc,
                     productName: productName,
@@ -194,22 +202,41 @@ exports.handler = async (event, context) => {
                     agency: "N/A",
                     penalty: "$0 Assessed",
                     details: "No corporate violations on record for this manufacturer in current tracking databases."
-                })
+                };
+            }
+
+            // Record scan into Netlify Blobs global history
+            await recordGlobalScan({
+                productName: responseData.productName,
+                brand: responseData.brand,
+                upc: responseData.upc,
+                imageUrl: responseData.imageUrl,
+                hasViolations: responseData.hasViolations,
+                violationText: responseData.hasViolations ? responseData.violationType : "Clean Record",
+                timestamp: "Just now"
+            });
+
+            return {
+                statusCode: 200,
+                headers,
+                body: JSON.stringify(responseData)
             };
         }
 
         // Step 4: Unrecognized Barcode Fallback
+        const fallbackData = {
+            found: false,
+            upc: upc,
+            productName: "Unregistered Consumer Item",
+            brand: "Unknown Manufacturer",
+            hasViolations: false,
+            details: "Product barcode not yet indexed in regulatory or Open Food/Beauty databases."
+        };
+
         return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({
-                found: false,
-                upc: upc,
-                productName: "Unregistered Consumer Item",
-                brand: "Unknown Manufacturer",
-                hasViolations: false,
-                details: "Product barcode not yet indexed in regulatory or Open Food/Beauty databases."
-            })
+            body: JSON.stringify(fallbackData)
         };
 
     } catch (error) {
