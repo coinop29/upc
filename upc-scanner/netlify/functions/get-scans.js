@@ -1,4 +1,5 @@
 // Netlify Function: /.netlify/functions/get-scans
+const blobs = require("@netlify/blobs");
 const { getStore } = require("@netlify/blobs");
 
 exports.handler = async (event, context) => {
