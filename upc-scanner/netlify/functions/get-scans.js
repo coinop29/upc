@@ -1,5 +1,4 @@
-const blobs = require("@netlify/blobs");
-const getStore = blobs.getStore;
+// Netlify Function: /.netlify/functions/get-scans
 
 exports.handler = async (event, context) => {
     const headers = {
@@ -10,7 +9,14 @@ exports.handler = async (event, context) => {
     };
 
     try {
-        const store = getStore("scan-history");
+        // Dynamically import ESM module to prevent CommonJS getStore errors
+        const { getStore } = await import("@netlify/blobs");
+
+        const store = getStore({
+            name: "scan-history",
+            consistency: "strong"
+        });
+
         const history = await store.get("global-scans", { type: "json" }) || [];
 
         return {
