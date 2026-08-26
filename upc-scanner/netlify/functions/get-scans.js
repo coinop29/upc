@@ -1,5 +1,7 @@
 // Netlify Function: /.netlify/functions/get-scans
 
+// Netlify Function: /.netlify/functions/get-scans
+
 exports.handler = async (event, context) => {
     const headers = {
         "Access-Control-Allow-Origin": "*",
@@ -9,8 +11,12 @@ exports.handler = async (event, context) => {
     };
 
     try {
-        // Dynamically import ESM module to prevent CommonJS getStore errors
-        const { getStore } = await import("@netlify/blobs");
+        const blobs = await import("@netlify/blobs");
+        const getStore = blobs.getStore || blobs.default?.getStore || blobs.default;
+
+        if (typeof getStore !== "function") {
+            throw new Error(`getStore resolved to ${typeof getStore} instead of function`);
+        }
 
         const store = getStore({
             name: "scan-history",
