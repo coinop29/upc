@@ -1,4 +1,3 @@
-Here is your updated index.html page. It now includes a Global Scans Feed section directly below your camera view that polls /.netlify/functions/get-scans every 5 seconds to show real-time scans happening across all site visitors.
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -163,7 +162,7 @@ Here is your updated index.html page. It now includes a Global Scans Feed sectio
     <div id="event-status" class="status-tag" style="display: none;">App Event PostMessage Sent!</div>
 
     <!-- Live Global Scans Feed -->
-    <h2>Recent Community Scans</h2>
+    <h2>Recent Public Scans</h2>
     <div id="global-feed-container" class="feed-list">
       <div class="placeholder-card">Loading live global feed...</div>
     </div>
@@ -307,8 +306,9 @@ Here is your updated index.html page. It now includes a Global Scans Feed sectio
       displayProductOnPage(code, productData);
       triggerAppEvent(code, productData);
 
-      // Force instant feed refresh right after user scans an item
-      setTimeout(fetchGlobalFeed, 800);
+      // Poll the backend feed twice after scanning to ensure Blobs write finishes
+      setTimeout(fetchGlobalFeed, 1000);
+      setTimeout(fetchGlobalFeed, 3000);
 
       setTimeout(() => {
         isProcessing = false;
